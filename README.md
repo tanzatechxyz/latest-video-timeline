@@ -1,15 +1,16 @@
-# Instagram Review Queue
+# Latest Review Queue
 
-CHATGPT MADE
+A self-hosted, browser-based review app for reviewing the newest added items first, while still preserving chronological queue tools.
 
-A self-hosted, browser-based review app for very large folders of Instagram video files stored on a NAS.
+This project started as a customized copy of `review-queue-project` and is tuned to make recent additions easy to spot and open immediately.
 
-This project is intentionally **not** a media-library clone. It is built to behave like a chronological review inbox:
+Core behavior:
 
 - scan a folder of thousands of videos
-- sort oldest to newest using configurable date priority
+- keep the original chronological queue behavior
+- surface the newest discovered items as a **Latest review** section
+- allow timeline sorting by `chronological` or `latest_added`
 - remember exactly where you left off across sessions
-- make **Continue** the primary action
 - stay fast and tablet-friendly on a local network
 
 ## Stack

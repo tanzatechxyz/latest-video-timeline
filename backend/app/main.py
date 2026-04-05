@@ -11,7 +11,7 @@ from app.db import SessionLocal
 from app.services.scan_service import scan_manager
 from app.services.settings_service import get_or_create_settings
 
-app = FastAPI(title="Instagram Review Queue", version="1.0.0")
+app = FastAPI(title="Latest Review Queue", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=env_settings.cors_origins_list, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.include_router(auth.router)
 app.include_router(dashboard.router)

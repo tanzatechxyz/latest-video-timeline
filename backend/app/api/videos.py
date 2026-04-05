@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/videos", tags=["videos"], dependencies=[Depends(
 
 def to_summary(video: Video, request: Request) -> VideoSummary:
     thumb_url = f"{request.base_url}api/videos/{video.id}/thumbnail" if video.thumbnail_path else None
-    return VideoSummary(id=video.id, filename=video.filename, rel_path=video.rel_path, extension=video.extension, size_bytes=video.size_bytes, duration_seconds=video.duration_seconds, thumbnail_url=thumb_url, derived_sort_date=video.derived_sort_date, derived_sort_source=video.derived_sort_source, review_state=video.review_state, bookmarked=video.bookmarked, playback_position_seconds=video.playback_position_seconds, last_interaction_at=video.last_interaction_at, is_missing=video.is_missing, error_message=video.error_message)
+    return VideoSummary(id=video.id, filename=video.filename, rel_path=video.rel_path, extension=video.extension, size_bytes=video.size_bytes, duration_seconds=video.duration_seconds, thumbnail_url=thumb_url, derived_sort_date=video.derived_sort_date, derived_sort_source=video.derived_sort_source, discovered_at=video.discovered_at, review_state=video.review_state, bookmarked=video.bookmarked, playback_position_seconds=video.playback_position_seconds, last_interaction_at=video.last_interaction_at, is_missing=video.is_missing, error_message=video.error_message)
 
 
 def to_detail(video: Video, request: Request, view: str = "unfinished") -> VideoDetail:
@@ -28,7 +28,7 @@ def to_detail(video: Video, request: Request, view: str = "unfinished") -> Video
 
 
 @router.get("", response_model=PaginatedVideosResponse)
-def list_videos(request: Request, view: str = Query(default="unfinished", pattern="^(all|unfinished|watched|skipped|bookmarked)$"), year: int | None = None, month: int | None = Query(default=None, ge=1, le=12), page: int = Query(default=1, ge=1), page_size: int = Query(default=60, ge=1, le=250), search: str | None = None, db: Session = Depends(get_db)) -> PaginatedVideosResponse:
+def list_videos(request: Request, view: str = Query(default="unfinished", pattern="^(all|unfinished|watched|skipped|bookmarked)$"), sort: str = Query(default="chronological", pattern="^(chronological|latest_added)$"), year: int | None = None, month: int | None = Query(default=None, ge=1, le=12), page: int = Query(default=1, ge=1), page_size: int = Query(default=60, ge=1, le=250), search: str | None = None, db: Session = Depends(get_db)) -> PaginatedVideosResponse:
     request.state.db = db
     stmt = select(Video).where(Video.is_missing.is_(False))
     if view == "unfinished": stmt = stmt.where(Video.review_state == "queued")
@@ -38,7 +38,10 @@ def list_videos(request: Request, view: str = Query(default="unfinished", patter
     if year is not None: stmt = stmt.where(func.strftime("%Y", Video.derived_sort_date) == f"{year:04d}")
     if month is not None: stmt = stmt.where(func.strftime("%m", Video.derived_sort_date) == f"{month:02d}")
     if search: stmt = stmt.where(Video.filename.ilike(f"%{search}%"))
-    stmt = stmt.order_by(Video.derived_sort_date.asc().nullslast(), Video.filename.asc())
+    if sort == "latest_added":
+        stmt = stmt.order_by(Video.discovered_at.desc(), Video.filename.asc())
+    else:
+        stmt = stmt.order_by(Video.derived_sort_date.asc().nullslast(), Video.filename.asc())
     total_items = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     total_pages = max((total_items + page_size - 1) // page_size, 1)
     items = db.execute(stmt.offset((page - 1) * page_size).limit(page_size)).scalars().all()

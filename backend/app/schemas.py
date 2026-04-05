@@ -86,6 +86,7 @@ class VideoSummary(BaseModel):
     thumbnail_url: str | None
     derived_sort_date: datetime | None
     derived_sort_source: str | None
+    discovered_at: datetime
     review_state: str
     bookmarked: bool
     playback_position_seconds: float

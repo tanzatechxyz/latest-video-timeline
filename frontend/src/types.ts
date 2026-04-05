@@ -23,6 +23,7 @@ export interface VideoSummary {
   thumbnail_url: string | null
   derived_sort_date: string | null
   derived_sort_source: string | null
+  discovered_at: string
   review_state: ReviewState
   bookmarked: boolean
   playback_position_seconds: number
