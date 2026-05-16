@@ -9,7 +9,7 @@ Core behavior:
 - scan a folder of thousands of videos
 - load the latest videos whenever the page opens
 - play videos newest to oldest
-- show a timeline grouped by video date
+- keep the player and timeline as separate pages so tablets and phones get a larger video view
 - rescan automatically every 3 hours
 - provide a **Rescan** button for immediate indexing
 - avoid playback/watch progress logging in the UI

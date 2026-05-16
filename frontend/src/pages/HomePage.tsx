@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { ActionButton } from '../components/ActionButton'
 import { api } from '../lib/api'
 import { formatDate, formatDuration, formatShortDate } from '../lib/format'
@@ -12,6 +13,8 @@ function videoDate(video: VideoSummary): string | null {
 
 export function HomePage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedVideoId = searchParams.get('video')
   const [videos, setVideos] = useState<VideoSummary[]>([])
   const [activeIndex, setActiveIndex] = useState(0)
   const [scanStatus, setScanStatus] = useState<ScanStatusResponse | null>(null)
@@ -21,7 +24,7 @@ export function HomePage() {
 
   const activeVideo = videos[activeIndex] ?? null
   const activeDate = activeVideo ? videoDate(activeVideo) : null
-  const streamUrl = activeVideo ? `/api/videos/${activeVideo.id}/stream` : ''
+  const streamUrl = activeVideo ? '/api/videos/' + activeVideo.id + '/stream' : ''
 
   async function loadLatest() {
     setError(null)
@@ -29,7 +32,11 @@ export function HomePage() {
     const [videoResponse, statusResponse] = await Promise.all([api.listVideos(params), api.getScanStatus()])
     setVideos(videoResponse.items)
     setScanStatus(statusResponse)
-    setActiveIndex((current) => Math.min(current, Math.max(videoResponse.items.length - 1, 0)))
+    setActiveIndex((current) => {
+      const requestedIndex = requestedVideoId ? videoResponse.items.findIndex((video) => video.id === requestedVideoId) : -1
+      if (requestedIndex >= 0) return requestedIndex
+      return Math.min(current, Math.max(videoResponse.items.length - 1, 0))
+    })
   }
 
   useEffect(() => {
@@ -47,21 +54,13 @@ export function HomePage() {
     void load()
     const timer = window.setInterval(() => { void loadLatest().catch(() => undefined) }, 30000)
     return () => { active = false; window.clearInterval(timer) }
-  }, [])
-
-  const grouped = useMemo(() => {
-    const groups = new Map<string, VideoSummary[]>()
-    for (const video of videos) {
-      const label = videoDate(video) ? new Date(videoDate(video) as string).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : 'Unknown date'
-      const group = groups.get(label) ?? []
-      group.push(video)
-      groups.set(label, group)
-    }
-    return Array.from(groups.entries())
-  }, [videos])
+  }, [requestedVideoId])
 
   const playAt = (index: number) => {
+    const target = videos[index]
+    if (!target) return
     setActiveIndex(index)
+    setSearchParams({ video: target.id }, { replace: true })
     window.requestAnimationFrame(() => videoRef.current?.play().catch(() => undefined))
   }
 
@@ -87,55 +86,34 @@ export function HomePage() {
     }
   }
 
-  return <div className="timeline-player">
-    <section className="player-panel">
+  return <div className="player-page">
+    <section className="player-panel player-panel-wide">
       <div className="player-toolbar">
         <div>
           <h2>{activeVideo?.filename ?? 'Latest videos'}</h2>
-          <p className="muted">{activeVideo ? `${formatDate(activeDate)} · ${formatDuration(activeVideo.duration_seconds)}` : 'Point Docker at a video folder and scan to populate the timeline.'}</p>
+          <p className="muted">{activeVideo ? formatDate(activeDate) + ' · ' + formatDuration(activeVideo.duration_seconds) : 'Point Docker at a video folder and scan to populate the timeline.'}</p>
         </div>
         <div className="hero-actions">
+          <Link className="action-link" to="/timeline">Timeline</Link>
           <ActionButton label="Rescan" tone="primary" onClick={() => void rescan()} disabled={rescanning || Boolean(scanStatus?.is_running)} />
           <ActionButton label="Refresh" onClick={() => void loadLatest().catch((err) => setError(err instanceof Error ? err.message : 'Failed to refresh'))} />
         </div>
       </div>
       {loading ? <div className="card">Loading latest videos...</div> : null}
       {error ? <div className="error-banner">{error}</div> : null}
-      {activeVideo ? <div className="video-stage">
+      {activeVideo ? <div className="video-stage video-stage-large">
         <video key={activeVideo.id} ref={videoRef} src={streamUrl} controls playsInline autoPlay preload="metadata" onEnded={playNext} />
       </div> : !loading ? <div className="empty-state">No videos found. Check the mounted folder and run a scan.</div> : null}
       <div className="transport-row">
         <ActionButton label="Previous" onClick={playPrevious} disabled={activeIndex <= 0} />
-        <div className="transport-count">{videos.length ? `${activeIndex + 1} of ${videos.length}` : '0 videos'}</div>
+        <div className="transport-count">{videos.length ? String(activeIndex + 1) + ' of ' + String(videos.length) : '0 videos'}</div>
         <ActionButton label="Next" onClick={playNext} disabled={activeIndex >= videos.length - 1} />
       </div>
       <div className="scan-line">
         Scan: {scanStatus?.is_running ? 'running' : scanStatus?.status ?? 'idle'}
-        {scanStatus?.finished_at ? ` · last finished ${formatShortDate(scanStatus.finished_at)}` : ''}
-        {scanStatus?.total_files ? ` · ${scanStatus.total_files} files` : ''}
+        {scanStatus?.finished_at ? ' · last finished ' + formatShortDate(scanStatus.finished_at) : ''}
+        {scanStatus?.total_files ? ' · ' + String(scanStatus.total_files) + ' files' : ''}
       </div>
     </section>
-
-    <aside className="timeline-panel">
-      <div className="timeline-header">
-        <h2>Timeline</h2>
-        <span className="badge">newest first</span>
-      </div>
-      <div className="timeline-list">
-        {grouped.map(([label, items]) => <section key={label} className="timeline-group">
-          <h3>{label}</h3>
-          {items.map((video) => {
-            const index = videos.findIndex((item) => item.id === video.id)
-            return <button key={video.id} className={`timeline-item ${index === activeIndex ? 'active' : ''}`} onClick={() => playAt(index)}>
-              <span className="timeline-thumb">{video.thumbnail_url ? <img src={video.thumbnail_url} alt="" loading="lazy" /> : video.extension.replace('.', '').toUpperCase()}</span>
-              <span>
-                <strong>{video.filename}</strong>
-                <small>{formatDuration(video.duration_seconds)}</small>
-              </span>
-            </button>
-          })}
-        </section>)}
-      </div>
-    </aside>
   </div>
 }
