@@ -22,6 +22,7 @@ services:
       APP_SECRET_KEY: replace-me
       APP_CORS_ORIGINS: http://localhost:8080
       APP_AUTO_SCAN_ON_STARTUP: "true"
+      APP_SCAN_INTERVAL_SECONDS: 10800
     volumes:
       - ./data:/data
       - ./sample-videos:/videos:ro

@@ -11,7 +11,7 @@ from app.db import SessionLocal
 from app.services.scan_service import scan_manager
 from app.services.settings_service import get_or_create_settings
 
-app = FastAPI(title="Latest Review Queue", version="1.0.0")
+app = FastAPI(title="Latest Video Timeline", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=env_settings.cors_origins_list, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.include_router(auth.router)
 app.include_router(dashboard.router)
@@ -26,6 +26,12 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+async def scheduled_scans() -> None:
+    while True:
+        await asyncio.sleep(env_settings.scan_interval_seconds)
+        await scan_manager.start_scan()
+
+
 @app.on_event("startup")
 async def startup() -> None:
     env_settings.data_path.mkdir(parents=True, exist_ok=True)
@@ -37,6 +43,8 @@ async def startup() -> None:
         db.close()
     if env_settings.auto_scan_on_startup:
         asyncio.create_task(scan_manager.start_scan())
+    if env_settings.scan_interval_seconds > 0:
+        asyncio.create_task(scheduled_scans())
 
 
 frontend_build = env_settings.frontend_build_path

@@ -1,16 +1,18 @@
-# Latest Review Queue
+# Latest Video Timeline
 
-A self-hosted, browser-based review app for reviewing the newest added items first, while still preserving chronological queue tools.
+A self-hosted, browser-based video timeline for a folder of local videos. The page loads the newest videos first, plays them newest-to-oldest, and keeps a manual timeline view beside the player.
 
-This project started as a customized copy of `review-queue-project` and is tuned to make recent additions easy to spot and open immediately.
+This project started as a customized copy of `review-queue-project` and is now tuned for stateless latest-video playback.
 
 Core behavior:
 
 - scan a folder of thousands of videos
-- keep the original chronological queue behavior
-- surface the newest discovered items as a **Latest review** section
-- allow timeline sorting by `chronological` or `latest_added`
-- remember exactly where you left off across sessions
+- load the latest videos whenever the page opens
+- play videos newest to oldest
+- show a timeline grouped by video date
+- rescan automatically every 3 hours
+- provide a **Rescan** button for immediate indexing
+- avoid playback/watch progress logging in the UI
 - stay fast and tablet-friendly on a local network
 
 ## Stack
@@ -42,31 +44,13 @@ Core behavior:
 
 ## Main behavior
 
-### Continue flow
-
 1. Open the app.
-2. Tap **Continue**.
-3. The backend returns the exact current item if it is still unfinished, otherwise the oldest unfinished item.
-4. Playback resumes from the saved position.
-5. When the item is done, the app can auto-advance.
+2. The latest indexed video loads immediately.
+3. When playback ends, the player advances to the next newest item.
+4. Use the timeline to jump to any indexed video.
+5. Use **Rescan** to index new files immediately.
 
-## Progress persistence
-
-Progress is stored in SQLite, not only in browser storage.
-
-For each video the app stores:
-
-- review state (`queued`, `watched`, `skipped`)
-- bookmark flag
-- last playback position
-- last interaction timestamp
-- watch completion timestamp
-
-For the app it stores:
-
-- `current_video_id`
-
-See also [`docs/progress-persistence.md`](docs/progress-persistence.md).
+The app keeps an SQLite index of discovered videos so startup stays fast, but the visible workflow does not log watched state, bookmarks, or playback progress.
 
 ## Chronological sort strategy
 
@@ -90,10 +74,8 @@ See also [`docs/sort-order.md`](docs/sort-order.md).
 - root folder: `/videos`
 - app data directory: `/data`
 - DB path: `/data/review_queue.db`
-- watched threshold: `95%`
 - sort priority: `filename,metadata,filesystem`
-- auto advance after Done: `true`
-- auto advance on ended: `true`
+- scan interval: `10800` seconds
 - thumbnails: `false`
 - auth: `false`
 
@@ -163,7 +145,7 @@ python scripts/dev_seed_from_folder.py /absolute/path/to/test/videos
 - filesystem date
 - derived sort date and source
 - thumbnail path when enabled
-- review state and playback progress
+- index timestamps and file availability
 
 ### Rename handling
 
@@ -254,10 +236,8 @@ TrueNAS SCALE documentation indicates that current 24.10+ releases support custo
 APP_DB_PATH=/data/review_queue.db
 APP_ROOT_FOLDER=/videos
 APP_DATA_DIR=/data
-APP_WATCHED_THRESHOLD_PERCENT=95
 APP_SORT_PRIORITY=filename,metadata,filesystem
-APP_AUTO_ADVANCE_ON_DONE=true
-APP_AUTO_ADVANCE_ON_END=true
+APP_SCAN_INTERVAL_SECONDS=10800
 APP_GENERATE_THUMBNAILS=false
 APP_AUTH_ENABLED=true
 APP_USERNAME=admin
@@ -277,19 +257,17 @@ Example service definition:
 
 ```yaml
 services:
-  instagram-review-queue:
-    image: your-registry/instagram-review-queue:latest
-    container_name: instagram-review-queue
+  latest-video-timeline:
+    image: ghcr.io/tanzatechxyz/latest-video-timeline:latest
+    container_name: latest-video-timeline
     ports:
       - "8080:8080"
     environment:
       APP_DB_PATH: /data/review_queue.db
       APP_ROOT_FOLDER: /videos
       APP_DATA_DIR: /data
-      APP_WATCHED_THRESHOLD_PERCENT: "95"
       APP_SORT_PRIORITY: filename,metadata,filesystem
-      APP_AUTO_ADVANCE_ON_DONE: "true"
-      APP_AUTO_ADVANCE_ON_END: "true"
+      APP_SCAN_INTERVAL_SECONDS: "10800"
       APP_GENERATE_THUMBNAILS: "false"
       APP_AUTH_ENABLED: "true"
       APP_USERNAME: admin
@@ -297,7 +275,7 @@ services:
       APP_SECRET_KEY: replace-with-a-long-random-secret
     volumes:
       - /mnt/POOL/media/instagram:/videos:ro
-      - /mnt/POOL/appdata/instagram-review-queue:/data
+      - /mnt/POOL/appdata/latest-video-timeline:/data
     restart: unless-stopped
 ```
 
@@ -308,7 +286,7 @@ services:
 - large views are paginated
 - missing or corrupt files are surfaced with clear errors
 - video files are streamed directly, not duplicated into app storage
-- queue state survives restarts because it lives in SQLite
+- the discovered video index survives restarts because it lives in SQLite
 
 ## UX notes
 

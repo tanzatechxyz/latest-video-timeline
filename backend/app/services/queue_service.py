@@ -8,12 +8,7 @@ from app.services.settings_service import get_or_create_settings
 
 
 def get_continue_video(db: Session) -> Video | None:
-    settings = get_or_create_settings(db)
-    if settings.current_video_id:
-        current = db.get(Video, settings.current_video_id)
-        if current and current.review_state == "queued" and not current.is_missing:
-            return current
-    return db.execute(select(Video).where(Video.review_state == "queued", Video.is_missing.is_(False)).order_by(Video.derived_sort_date.asc().nullslast(), Video.filename.asc()).limit(1)).scalars().first()
+    return db.execute(select(Video).where(Video.is_missing.is_(False)).order_by(Video.derived_sort_date.desc().nullslast(), Video.modified_time.desc().nullslast(), Video.discovered_at.desc(), Video.filename.asc()).limit(1)).scalars().first()
 
 
 def set_current_video(db: Session, video_id: str | None):
@@ -35,7 +30,7 @@ def _id_list_for_view(db: Session, view: str) -> list[str]:
         stmt = stmt.where(Video.review_state == "skipped")
     elif view == "bookmarked":
         stmt = stmt.where(Video.bookmarked.is_(True))
-    stmt = stmt.order_by(Video.derived_sort_date.asc().nullslast(), Video.filename.asc())
+    stmt = stmt.order_by(Video.derived_sort_date.desc().nullslast(), Video.modified_time.desc().nullslast(), Video.discovered_at.desc(), Video.filename.asc())
     return list(db.execute(stmt).scalars().all())
 
 

@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     secret_key: str = "change-this-in-production"
     cors_origins: str = "http://localhost:5173,http://localhost:8080"
     auto_scan_on_startup: bool = True
+    scan_interval_seconds: int = 10800
     scan_on_settings_save: bool = False
 
     @property
