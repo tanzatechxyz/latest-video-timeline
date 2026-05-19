@@ -17,6 +17,21 @@ def filesystem_dates(stat_result: os.stat_result) -> tuple[datetime | None, date
     return birth_time, modified_time
 
 
+def root_entry_added_date(root_folder: Path, file_path: Path) -> datetime:
+    try:
+        relative = file_path.relative_to(root_folder)
+        entry_path = root_folder / relative.parts[0] if relative.parts else file_path
+        stat_result = entry_path.stat()
+    except (OSError, ValueError):
+        stat_result = file_path.stat()
+    birth_ts = getattr(stat_result, "st_birthtime", None)
+    for timestamp in (birth_ts, stat_result.st_ctime, stat_result.st_mtime):
+        value = utc_from_timestamp(timestamp)
+        if value is not None:
+            return value
+    return datetime.now(timezone.utc)
+
+
 def path_fingerprint(relative_path: str) -> str:
     return hashlib.sha1(relative_path.encode("utf-8")).hexdigest()
 

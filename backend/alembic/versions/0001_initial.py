@@ -97,7 +97,7 @@ def upgrade() -> None:
             current_video_id, created_at, updated_at
         ) VALUES (
             1, '/videos', '.mp4,.mov,.m4v,.webm,.mkv', 95,
-            'filename,metadata,filesystem', 1, 1,
+            'filesystem,filename,metadata', 1, 1,
             0, 3, 480,
             NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         )

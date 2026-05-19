@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     data_dir: str = "/data"
     supported_extensions: str = ".mp4,.mov,.m4v,.webm,.mkv"
     watched_threshold_percent: int = 95
-    sort_priority: str = "filename,metadata,filesystem"
+    sort_priority: str = "filesystem,filename,metadata"
     auto_advance_on_done: bool = True
     auto_advance_on_end: bool = True
     generate_thumbnails: bool = False

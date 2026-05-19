@@ -11,9 +11,9 @@ from app.config import settings as env_settings
 from app.db import SessionLocal
 from app.models import ScanJob, Video
 from app.services.settings_service import get_or_create_settings
-from app.utils.dates import choose_sort_date, parse_date_from_filename
+from app.utils.dates import choose_sort_date, ensure_utc, parse_date_from_filename
 from app.utils.ffprobe import generate_thumbnail, probe_video
-from app.utils.files import content_fingerprint, filesystem_dates, path_fingerprint
+from app.utils.files import content_fingerprint, filesystem_dates, path_fingerprint, root_entry_added_date
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,7 @@ class ScanManager:
                         all_files.append(path)
             scan_job.total_files = len(all_files)
             db.add(scan_job); db.commit()
+            current_rel_paths = {str(path.relative_to(root_folder)) for path in all_files}
             existing_by_path = {video.rel_path: video for video in db.execute(select(Video)).scalars().all()}
             existing_by_fingerprint = {video.content_fingerprint: video for video in existing_by_path.values() if video.content_fingerprint}
             seen_rel_paths: set[str] = set()
@@ -74,19 +75,28 @@ class ScanManager:
                     seen_rel_paths.add(rel_path)
                     stat_result = file_path.stat()
                     birth_time, modified_time = filesystem_dates(stat_result)
-                    filesystem_date = birth_time or modified_time
+                    filesystem_date = root_entry_added_date(root_folder, file_path)
                     current_by_path = existing_by_path.get(rel_path)
                     if current_by_path and current_by_path.size_bytes == stat_result.st_size and current_by_path.mtime_ns == stat_result.st_mtime_ns:
                         current_by_path.abs_path = str(file_path)
                         current_by_path.last_seen_at = datetime.now(timezone.utc)
                         current_by_path.is_missing = False
                         current_by_path.missing_since = None
+                        sort_date, sort_source = choose_sort_date([item.strip() for item in settings.sort_priority_csv.split(",") if item.strip()], current_by_path.filename_date, current_by_path.metadata_date, filesystem_date)
+                        if ensure_utc(current_by_path.filesystem_date) != filesystem_date or ensure_utc(current_by_path.derived_sort_date) != sort_date or current_by_path.derived_sort_source != sort_source:
+                            current_by_path.birth_time = birth_time
+                            current_by_path.modified_time = modified_time
+                            current_by_path.filesystem_date = filesystem_date
+                            current_by_path.derived_sort_date = sort_date
+                            current_by_path.derived_sort_source = sort_source
+                            scan_job.updated_files += 1
                         db.add(current_by_path)
                         scan_job.scanned_files = idx
                         db.add(scan_job); db.commit(); continue
                     file_content_fingerprint = content_fingerprint(file_path, stat_result.st_size)
                     file_path_fingerprint = path_fingerprint(rel_path)
-                    rename_match = existing_by_fingerprint.get(file_content_fingerprint) if file_content_fingerprint else None
+                    fingerprint_match = existing_by_fingerprint.get(file_content_fingerprint) if file_content_fingerprint else None
+                    rename_match = fingerprint_match if fingerprint_match and fingerprint_match.rel_path not in current_rel_paths else None
                     duration, metadata_date, probe_error = probe_video(file_path)
                     filename_date = parse_date_from_filename(file_path.name)
                     sort_date, sort_source = choose_sort_date([item.strip() for item in settings.sort_priority_csv.split(",") if item.strip()], filename_date, metadata_date, filesystem_date)
@@ -98,7 +108,8 @@ class ScanManager:
                             thumbnail_path = str(thumb_file)
                     video = current_by_path or rename_match
                     if video is None:
-                        video = Video(id=f"vid_{(file_content_fingerprint or file_path_fingerprint)[:24]}", rel_path=rel_path, abs_path=str(file_path), filename=file_path.name, extension=file_path.suffix.lower(), size_bytes=stat_result.st_size, mtime_ns=stat_result.st_mtime_ns, birth_time=birth_time, modified_time=modified_time, discovered_at=datetime.now(timezone.utc), last_seen_at=datetime.now(timezone.utc), content_fingerprint=file_content_fingerprint, path_fingerprint=file_path_fingerprint, duration_seconds=duration, thumbnail_path=thumbnail_path, filename_date=filename_date, metadata_date=metadata_date, filesystem_date=filesystem_date, derived_sort_date=sort_date, derived_sort_source=sort_source, review_state="queued", bookmarked=False, playback_position_seconds=0.0, error_message=probe_error or thumb_error, is_missing=False)
+                        video_id_source = file_path_fingerprint if fingerprint_match else (file_content_fingerprint or file_path_fingerprint)
+                        video = Video(id=f"vid_{video_id_source[:24]}", rel_path=rel_path, abs_path=str(file_path), filename=file_path.name, extension=file_path.suffix.lower(), size_bytes=stat_result.st_size, mtime_ns=stat_result.st_mtime_ns, birth_time=birth_time, modified_time=modified_time, discovered_at=datetime.now(timezone.utc), last_seen_at=datetime.now(timezone.utc), content_fingerprint=file_content_fingerprint, path_fingerprint=file_path_fingerprint, duration_seconds=duration, thumbnail_path=thumbnail_path, filename_date=filename_date, metadata_date=metadata_date, filesystem_date=filesystem_date, derived_sort_date=sort_date, derived_sort_source=sort_source, review_state="queued", bookmarked=False, playback_position_seconds=0.0, error_message=probe_error or thumb_error, is_missing=False)
                         db.add(video); scan_job.added_files += 1
                     else:
                         if rename_match and current_by_path is None and video.rel_path != rel_path:
